@@ -1,0 +1,106 @@
+
+#include <DHT.h>
+
+// Sensor pins
+#define DHT_PIN 2
+#define DHT_TYPE DHT11
+#define LDR_PIN A0
+#define SMOKE_PIN A1
+
+// Output pins
+#define LIGHT_LED 6
+#define BUZZER_PIN 8
+#define FAN_PIN 9
+#define RED_LED 10
+#define BLUE_LED 11
+
+// Adjustable demonstration thresholds
+const int DARK_THRESHOLD = 300;
+const int SMOKE_THRESHOLD = 350;
+
+const float HOT_TEMP = 30.0;
+const float FAN_OFF_TEMP = 28.0;
+const float COLD_TEMP = 10.0;
+
+DHT dht(DHT_PIN, DHT_TYPE);
+
+bool fanOn = false;
+
+void setup() {
+  Serial.begin(9600);
+  dht.begin();
+
+  pinMode(LIGHT_LED, OUTPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
+  pinMode(FAN_PIN, OUTPUT);
+  pinMode(RED_LED, OUTPUT);
+  pinMode(BLUE_LED, OUTPUT);
+
+  digitalWrite(LIGHT_LED, LOW);
+  digitalWrite(BUZZER_PIN, LOW);
+  digitalWrite(FAN_PIN, LOW);
+  digitalWrite(RED_LED, LOW);
+  digitalWrite(BLUE_LED, LOW);
+
+  Serial.println("Smart Elevator Safety System");
+}
+
+void loop() {
+  // Read sensors
+  int lightValue = analogRead(LDR_PIN);
+  int smokeValue = analogRead(SMOKE_PIN);
+
+  float temperature = dht.readTemperature();
+  float humidity = dht.readHumidity();
+
+  // 1. Outdoor light control
+  // With the specified LDR divider, a low value means darkness.
+  digitalWrite(
+    LIGHT_LED,
+    lightValue < DARK_THRESHOLD ? HIGH : LOW
+  );
+
+  // 2. Smoke alarm
+  bool smokeDetected = smokeValue > SMOKE_THRESHOLD;
+
+  digitalWrite(RED_LED, smokeDetected ? HIGH : LOW);
+  digitalWrite(BUZZER_PIN, smokeDetected ? HIGH : LOW);
+
+  // 3. Temperature monitoring
+  if (isnan(temperature) || isnan(humidity)) {
+    Serial.println("ERROR: DHT sensor reading failed");
+    // Stop the fan output when the temperature reading is invalid.
+    fanOn = false;
+  } else {
+    // Fan hysteresis prevents rapid switching.
+    if (temperature >= HOT_TEMP) {
+      fanOn = true;
+    } else if (temperature <= FAN_OFF_TEMP) {
+      fanOn = false;
+    }
+
+    // Low-temperature warning only; no heater is controlled.
+    digitalWrite(
+      BLUE_LED,
+      temperature < COLD_TEMP ? HIGH : LOW
+    );
+
+    Serial.print("Temperature: ");
+    Serial.print(temperature);
+    Serial.print(" C | Humidity: ");
+    Serial.print(humidity);
+    Serial.println(" %");
+  }
+
+  digitalWrite(FAN_PIN, fanOn ? HIGH : LOW);
+
+  // Other readings
+  Serial.print("Light: ");
+  Serial.print(lightValue);
+  Serial.print(" | Smoke: ");
+  Serial.print(smokeValue);
+  Serial.print(" | Fan: ");
+  Serial.println(fanOn ? "ON" : "OFF");
+
+  delay(2000);
+}
